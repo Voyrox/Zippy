@@ -16,20 +16,16 @@ cabal.sandbox.config
 *.aux
 *.hp
 *.eventlog
-.stack-work/
-cabal.project.local
-cabal.project.local~
-.HTF/
 .ghc.environment.*
+
 test/test.exe
 test/test.hi
 test/test.o
-code.txt
 test/stack.yaml.lock
 test/app/test.exe
 
-re-write/.zig-cache/
-re-write/zig-out/
+.zig-cache/
+zig-out/
 test/Haskell/app/test.exe
 test/Haskell/app/test.hi
 test/Haskell/app/test.o
