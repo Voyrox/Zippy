@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const exe = b.addExecutable(.{
-        .name = "haskmate",
+        .name = "zippy",
         .root_module = mod,
     });
 
@@ -23,6 +23,6 @@ pub fn build(b: *std.Build) void {
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| run_cmd.addArgs(args);
 
-    const run_step = b.step("run", "Run haskmate");
+    const run_step = b.step("run", "Run zippy");
     run_step.dependOn(&run_cmd.step);
 }

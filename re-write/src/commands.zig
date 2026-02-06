@@ -21,7 +21,7 @@ fn repeatChar(alloc: std.mem.Allocator, c: u8, count: usize) ![]u8 {
 }
 
 pub fn displayHelpData(alloc: std.mem.Allocator) !void {
-    const message = "Welcome to HaskMate!";
+    const message = "Welcome to Zippy!";
     const boxWidth: usize = message.len + 4;
     const dash_count = boxWidth - 2;
 
@@ -46,16 +46,16 @@ pub fn displayHelpData(alloc: std.mem.Allocator) !void {
     try spr("{s}Arguments:\n", .{Colors.yellow});
     try spr("{s}  scriptPath  Path to the Haskell script you want to monitor\n", .{Colors.white});
     try spr("{s}Example:\n", .{Colors.green});
-    try spr("{s}  haskmate app/Main.hs\n", .{Colors.white});
+    try spr("{s}  zippy app/Main.hs\n", .{Colors.white});
 }
 
 pub fn displayCommands() !void {
     try spr("{s}Commands:\n", .{Colors.yellow});
     try spr("{s}  --help      Display help information\n", .{Colors.white});
     try spr("{s}  --version   Display version information/Check for updates\n", .{Colors.white});
-    try spr("{s}  --config    Configure HaskMate\n", .{Colors.white});
-    try spr("{s}  --log       Display HaskMate log\n", .{Colors.white});
-    try spr("{s}  --clear     Clear HaskMate log\n", .{Colors.white});
+    try spr("{s}  --config    Configure Zippy\n", .{Colors.white});
+    try spr("{s}  --log       Display Zippy log\n", .{Colors.white});
+    try spr("{s}  --clear     Clear Zippy log\n", .{Colors.white});
     try spr("{s}  --credits   Display credits\n", .{Colors.white});
 }
 
@@ -86,6 +86,6 @@ const Release = struct {
 };
 
 pub fn displayVersionData() !void {
-    try spr("{s}HaskMate version: {s}{s}\n", .{ Colors.green, "v1.3.0", Colors.white });
-    try spr("{s}  https://github.com/Voyrox/HaskMate/releases/latest\n", .{Colors.white});
+    try spr("{s}Zippy version: {s}{s}\n", .{ Colors.green, "v1.3.0", Colors.white });
+    try spr("{s}  https://github.com/Voyrox/Zippy/releases/latest\n", .{Colors.white});
 }

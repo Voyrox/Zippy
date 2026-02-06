@@ -24,10 +24,10 @@ pub fn loadSettings(alloc: std.mem.Allocator, path: []const u8) !?Settings {
     const bytes = try file.readToEndAlloc(alloc, 1024 * 1024);
     defer alloc.free(bytes);
 
-    var parsed = std.json.parseFromSlice(SettingsJson, alloc, bytes, .{ .ignore_unknown_fields = true }) catch |e| {
-        std.debug.print("Error decoding settings: {any}\n", .{e});
+    var parsed = std.json.parseFromSlice(SettingsJson, alloc, bytes, .{ .ignore_unknown_fields = true }) catch {
         return null;
     };
+
     defer parsed.deinit();
 
     const pj = parsed.value;

@@ -15,6 +15,6 @@ pub fn generateConfig() !void {
         "  \"cmd\": \"stack ghc -- {file} && {dir}/test\"\n" ++
         "}\n";
 
-    try std.fs.cwd().writeFile(.{ .sub_path = "HaskMate.json", .data = text });
+    try std.fs.cwd().writeFile(.{ .sub_path = "Zippy.json", .data = text });
     try spr("Configuration file generated successfully!\n", .{});
 }
