@@ -27,23 +27,14 @@ fn getLastModifiedNs(path: []const u8) !i128 {
     return st.mtime;
 }
 
-fn spawnShell(alloc: std.mem.Allocator, cmd: []const u8) !std.process.Child {
+fn spawnShell(alloc: std.mem.Allocator, cmd: []const u8, cwd: []const u8) !std.process.Child {
     var child = std.process.Child.init(&[_][]const u8{ "sh", "-c", cmd }, alloc);
     child.stdin_behavior = .Inherit;
     child.stdout_behavior = .Inherit;
     child.stderr_behavior = .Inherit;
+    child.cwd = cwd;
     try child.spawn();
     return child;
-}
-
-fn waitAndReport(log: *Logger, child: *std.process.Child) !void {
-    const term = try child.wait();
-    switch (term) {
-        .Exited => |code| {
-            if (code != 0) try log.err("Command exited with code {d}", .{code});
-        },
-        else => {},
-    }
 }
 
 fn replaceAllAlloc(
@@ -98,8 +89,9 @@ fn runConfiguredCommand(
     alloc: std.mem.Allocator,
     log: *Logger,
     maybe_settings: ?*const settings_mod.Settings,
-    fullPath: []const u8,
-) !void {
+    dir_path: []const u8,
+    file_path: []const u8,
+) !std.process.Child {
     if (maybe_settings == null) {
         try log.warn("No Zippy.json found. Create one with --generate", .{});
         try std.fs.File.stderr().writeAll(
@@ -110,43 +102,98 @@ fn runConfiguredCommand(
                 "}\n" ++
                 "Placeholders: {file} (absolute path), {dir} (directory)\n",
         );
-        return;
+        return error.Invalid;
     }
 
     const s = maybe_settings.?;
     if (s.cmd.len == 0) {
         try log.err("Zippy.json loaded but \"cmd\" is empty", .{});
-        return;
+        return error.Invalid;
     }
 
-    const dir_path = std.fs.path.dirname(fullPath) orelse ".";
-    const expanded = try expandPlaceholders(alloc, s.cmd, fullPath, dir_path);
+    const expanded = try expandPlaceholders(alloc, s.cmd, file_path, dir_path);
     defer alloc.free(expanded);
 
     try log.info("Running: {s}", .{expanded});
 
-    var child = try spawnShell(alloc, expanded);
-    try waitAndReport(log, &child);
+    return try spawnShell(alloc, expanded, dir_path);
+}
+
+const WatchState = struct {
+    mtime: i128,
+    file_path: []const u8,
+    owns: bool,
+};
+
+fn freeWatchState(alloc: std.mem.Allocator, state: *WatchState) void {
+    if (state.owns) alloc.free(state.file_path);
+    state.owns = false;
+}
+
+fn computeWatchState(
+    alloc: std.mem.Allocator,
+    watch_dir: []const u8,
+    maybe_file: ?[]const u8,
+) !WatchState {
+    if (maybe_file) |file_path| {
+        const st = try std.fs.cwd().statFile(file_path);
+        return .{ .mtime = st.mtime, .file_path = file_path, .owns = false };
+    }
+
+    var dir = try std.fs.cwd().openDir(watch_dir, .{ .iterate = true });
+    defer dir.close();
+
+    const dir_stat = try dir.stat();
+    var best_mtime: i128 = dir_stat.mtime;
+    var best_path: []const u8 = watch_dir;
+    var owns: bool = false;
+
+    var it = dir.iterate();
+    while (try it.next()) |entry| {
+        const entry_stat = try dir.statFile(entry.name);
+        if (entry_stat.mtime > best_mtime) {
+            if (owns) alloc.free(best_path);
+            best_mtime = entry_stat.mtime;
+            best_path = try std.fs.path.join(alloc, &[_][]const u8{ watch_dir, entry.name });
+            owns = true;
+        }
+    }
+
+    return .{ .mtime = best_mtime, .file_path = best_path, .owns = owns };
 }
 
 fn monitorScript(
     alloc: std.mem.Allocator,
     log: *Logger,
     delay_us: u64,
-    fullPath: []const u8,
+    watch_dir: []const u8,
+    watch_file: ?[]const u8,
     maybe_settings: ?*const settings_mod.Settings,
 ) !void {
-    try runConfiguredCommand(alloc, log, maybe_settings, fullPath);
-    var last = try getLastModifiedNs(fullPath);
+    var state = try computeWatchState(alloc, watch_dir, watch_file);
+    defer freeWatchState(alloc, &state);
+
+    var current_child = try runConfiguredCommand(alloc, log, maybe_settings, watch_dir, state.file_path);
 
     while (true) {
         std.Thread.sleep(delay_us * std.time.ns_per_us);
 
-        const current = try getLastModifiedNs(fullPath);
-        if (current > last) {
+        var next = try computeWatchState(alloc, watch_dir, watch_file);
+        defer freeWatchState(alloc, &next);
+
+        if (next.mtime > state.mtime) {
             try log.warn("File changed; re-running command…", .{});
-            try runConfiguredCommand(alloc, log, maybe_settings, fullPath);
-            last = try getLastModifiedNs(fullPath);
+            _ = current_child.kill() catch |e| switch (e) {
+                error.ProcessNotFound => {},
+                else => return e,
+            };
+            _ = current_child.wait() catch {};
+
+            current_child = try runConfiguredCommand(alloc, log, maybe_settings, watch_dir, next.file_path);
+
+            freeWatchState(alloc, &state);
+            state = next;
+            next.owns = false;
         }
     }
 }
@@ -161,41 +208,39 @@ pub fn main() !void {
     defer std.process.argsFree(alloc, args);
 
     if (args.len == 1) {
-        try log.err("No script path provided. Example: zippy ../test/app/test.hs", .{});
+        try log.err("No path provided. Examples: zippy ./Main.hs or zippy .", .{});
         return;
     }
 
     const arg1 = args[1];
+    const memory = std.mem;
 
-    if (std.mem.eql(u8, arg1, "--help") or std.mem.eql(u8, arg1, "--h")) {
+    if (memory.eql(u8, arg1, "--help") or memory.eql(u8, arg1, "--h")) {
         try commands.displayHelpData(alloc);
         return;
     }
-    if (std.mem.eql(u8, arg1, "--generate") or std.mem.eql(u8, arg1, "--gen")) {
+    if (memory.eql(u8, arg1, "--generate") or memory.eql(u8, arg1, "--gen")) {
         try generate.generateConfig();
         return;
     }
-    if (std.mem.eql(u8, arg1, "--version") or std.mem.eql(u8, arg1, "--v")) {
+    if (memory.eql(u8, arg1, "--version") or memory.eql(u8, arg1, "--v")) {
         try commands.displayVersionData();
         return;
     }
-    if (std.mem.eql(u8, arg1, "--commands")) {
-        try commands.displayCommands();
-        return;
-    }
-    if (std.mem.eql(u8, arg1, "--config")) {
+
+    if (memory.eql(u8, arg1, "--config")) {
         try commands.displayConfigData();
         return;
     }
-    if (std.mem.eql(u8, arg1, "--log")) {
+    if (memory.eql(u8, arg1, "--log")) {
         try commands.displayLogData();
         return;
     }
-    if (std.mem.eql(u8, arg1, "--clear")) {
+    if (memory.eql(u8, arg1, "--clear")) {
         try commands.displayClearData();
         return;
     }
-    if (std.mem.eql(u8, arg1, "--credits")) {
+    if (memory.eql(u8, arg1, "--credits")) {
         try commands.displayCreditsData();
         return;
     }
@@ -221,12 +266,22 @@ pub fn main() !void {
     const cwd = try std.fs.cwd().realpathAlloc(alloc, ".");
     defer alloc.free(cwd);
 
-    const fullPath = try std.fs.path.join(alloc, &[_][]const u8{ cwd, arg1 });
-    defer alloc.free(fullPath);
+    const targetPath = try std.fs.path.join(alloc, &[_][]const u8{ cwd, arg1 });
+    defer alloc.free(targetPath);
+
+    const st = try std.fs.cwd().statFile(targetPath);
+    const is_dir = st.kind == .directory;
+
+    const watch_dir: []const u8 = if (is_dir) targetPath else (std.fs.path.dirname(targetPath) orelse cwd);
+    const watch_file: ?[]const u8 = if (is_dir) null else targetPath;
 
     try log.info("Starting Zippy v1.3.0", .{});
-    try log.info("Watching: {s}", .{fullPath});
+    if (watch_file) |_f| {
+        try log.info("Watching file: {s}", .{_f});
+    } else {
+        try log.info("Watching directory: {s}", .{watch_dir});
+    }
     try log.info("Press Ctrl+C to exit", .{});
 
-    try monitorScript(alloc, &log, delay_us, fullPath, loaded_ptr);
+    try monitorScript(alloc, &log, delay_us, watch_dir, watch_file, loaded_ptr);
 }

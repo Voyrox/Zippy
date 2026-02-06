@@ -43,13 +43,9 @@ pub fn displayHelpData(alloc: std.mem.Allocator) !void {
     try spr("{s}│{s}{s}{s}{s}{s}│\n", .{ Colors.red, padding, Colors.green, message, Colors.red, padding });
     try spr("{s}└{s}┘\n", .{ Colors.red, line });
 
-    try spr("{s}Arguments:\n", .{Colors.yellow});
-    try spr("{s}  scriptPath  Path to the Haskell script you want to monitor\n", .{Colors.white});
     try spr("{s}Example:\n", .{Colors.green});
-    try spr("{s}  zippy app/Main.hs\n", .{Colors.white});
-}
+    try spr("{s}  zippy app/Main.hs\n\n", .{Colors.white});
 
-pub fn displayCommands() !void {
     try spr("{s}Commands:\n", .{Colors.yellow});
     try spr("{s}  --help      Display help information\n", .{Colors.white});
     try spr("{s}  --version   Display version information/Check for updates\n", .{Colors.white});

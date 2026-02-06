@@ -10,8 +10,10 @@ make build
 zig build run -- path/to/Main.hs
 
 # Install it globally
-make install          # (Recommended) /usr/local on Linux | %LOCALAPPDATA%/Programs/zippy on Windows
-make install PREFIX=$HOME/.local   # user-local
+make install                   # /usr/local on Linux | %LOCALAPPDATA%/Programs/zippy on Windows
+make install PREFIX=$HOME/.local  # user-local
+
+# Run zippy!
 zippy ./Main.hs
 ```
 
@@ -23,13 +25,15 @@ Zippy loads `Zippy.json` from the current working directory:
 {
   "delay": 1000000,
   "ignore": [],
-  "cmd": "stack ghc -- {file} && {dir}/Main"
+  "cmd": "stack ghc {file} && ./test"
+   -- OR --
+  "cmd": "node index.js"
 }
 ```
 
 - `delay` (microseconds): debounce between change checks (default: 1_000_000).
 - `ignore`: reserved for future ignore patterns.
-- `cmd`: command to execute when the watched file changes. Placeholders: `{file}` (absolute path), `{dir}` (containing directory).
+- `cmd`: command to execute when changes occur. Placeholders: `{file}` (changed file or watched dir), `{dir}` (watched directory).
 
 Generate a starter config: `zippy --generate`.
 
@@ -53,14 +57,6 @@ Generate a starter config: `zippy --generate`.
 2026-02-06 16:22:17.998 [WARN] Zippy File changed; re-running command…
 ```
 
-## Features
-
-- File watcher tuned for a single Haskell entry point
-- Instant rebuild + re-run with configurable commands
-- Structured, TTY-aware logging to stderr (INFO/WARN/ERROR/SUCCESS/DEBUG)
-- Placeholder expansion `{file}` and `{dir}` in commands
-- Zero runtime deps beyond Zig + your Haskell toolchain
-
 ## Build & install
 
 Prereqs: Zig 0.15.2+
@@ -72,9 +68,3 @@ Prereqs: Zig 0.15.2+
   - `make build-windows`
   - `make install PREFIX="$LOCALAPPDATA/Programs/zippy"`
 - Add `$(PREFIX)/bin` to your `PATH` if it isn’t already.
-
-Run after install:
-
-```bash
-zippy app/Main.hs
-```

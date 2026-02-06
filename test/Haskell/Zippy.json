@@ -1,5 +1,5 @@
 {
-  "delay": 500000,
+  "delay": 1000000,
   "ignore": [],
   "cmd": "stack ghc -- {file} && {dir}/test"
 }
